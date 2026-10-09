@@ -6352,6 +6352,7 @@ const App = {
       setTimeout(() => Conta.garante(), 650);                 // sem conta: tela de entrar / criar conta
     };
     intro.addEventListener('click', entra);
+    intro.addEventListener('pointerdown', () => { try { entra(); } catch (_) {} });   // iPhone: entra já no toque, sem esperar o clique
     intro.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') entra(); });
     // qualquer toque destrava o áudio (iOS)
     addEventListener('pointerdown', () => Som.retomar(), { passive: true });
@@ -6538,15 +6539,8 @@ window.__ginga = { Jogo, R, App, Lobby, Telas, Salas, SalaLocal, Rede, Online, S
   }
   document.addEventListener('focusin', e => { if (CAMPOS.includes(e.target.id)) dig(true); });
   document.addEventListener('input', e => { if (CAMPOS.includes(e.target.id)) dig(true); });
-  // iPhone: sem zoom de dois toques nem de pinça (o Android já não fazia isso)
+  // iPhone: sem zoom de pinça (o de dois toques o CSS touch-action:manipulation já resolve, sem comer cliques)
   document.addEventListener('gesturestart', e => e.preventDefault());
-  let ultimoToque = 0;
-  document.addEventListener('touchend', e => {
-    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')){ ultimoToque = 0; return; }   // campo de texto: deixa focar
-    const agora = performance.now();
-    if (agora - ultimoToque <= 350 && e.cancelable) e.preventDefault();
-    ultimoToque = agora;
-  }, { passive: false });
 
   document.addEventListener('focusout', e => {
     if (CAMPOS.includes(e.target.id)) dig(false, true);
