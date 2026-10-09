@@ -1218,7 +1218,7 @@ let chaveSave = CHAVE;
 { const s = sessaoSalva(); if (s) chaveSave = CHAVE + ':' + s.chave; }
 function carregar(chave){ return mergeFundo(saveBase(), lerJSON(chave || chaveSave)); }
 let S = carregar();
-if (S.cfg.efeitos === 85){ S.cfg.efeitos = 0; salvar(); }   // efeitos agora vêm desligados (liga em AJUSTES se quiser)
+if (S.cfg.efeitos === 85) S.cfg.efeitos = 0;   // efeitos agora vêm desligados (liga em AJUSTES se quiser) — sem salvar() aqui: ainda não existe
 let salvarT = 0, aoSalvar = null;
 function salvar(){ clearTimeout(salvarT); salvarT = setTimeout(() => { S.salvoEm = Date.now(); try { localStorage.setItem(chaveSave, JSON.stringify(S)); } catch (_) {} if (aoSalvar) aoSalvar(); }, 120); }
 function salvarJa(){ clearTimeout(salvarT); try { localStorage.setItem(chaveSave, JSON.stringify(S)); } catch (_) {} }
