@@ -1,9 +1,12 @@
 /* =====================================================================
-   STREETBALL · SERVIDOR DEDICADO (v63)
+   STREETBALL · SERVIDOR DEDICADO (v64)
    Roda as salas do jogo na nuvem: cada sala é uma instância do próprio jogo
    executando como anfitriã dentro do Node (jsdom), então a física, os bots e
    as regras são EXATAMENTE os do jogo. Os jogadores só mandam direção/chute
    e recebem o estado — por isso a internet deles quase não importa.
+
+   v64: salas PÚBLICAS (formação automática) · chat da comunidade (BRASIL/GLOBAL) ·
+   ID de membro · sala vazia fecha em 90 s · partida rápida.
 
    Uso:  node servidor.js   (porta 3000, ou PORT=xxxx)
    Deps: npm install  (ws + jsdom)
@@ -18,8 +21,8 @@ const { JSDOM } = require('jsdom');
 const PORT = +(process.env.PORT || 3000);
 const DIR = __dirname;
 const NET_PRE = 'streetball-v52-';
-const MAX_SALAS = +(process.env.MAX_SALAS || 10);      // quantas salas simultâneas no servidor
-const SALA_VAZIA_MS = 5 * 60 * 1000;                   // sala vazia morre depois de 5 min
+const MAX_SALAS = +(process.env.MAX_SALAS || 6);       // salas simultâneas (públicas + personalizadas)
+const SALA_VAZIA_MS = 90 * 1000;                       // sala sem ninguém fecha em 90 s (e sai da lista)
 const MURAL_TTL_MS = 90 * 1000;                        // registro do mural some se o anfitrião parar de avisar
 
 require('./sb-link.js');                               // define globalThis.SB_MAKE_PEER
@@ -28,20 +31,20 @@ const makePeerClass = globalThis.SB_MAKE_PEER;
 /* ---------- página do jogo com o transporte injetado ---------- */
 const LINK_SRC = fs.readFileSync(path.join(DIR, 'sb-link.js'), 'utf8');
 let PAGINA = fs.readFileSync(path.join(DIR, 'index.html'), 'utf8');
-PAGINA = PAGINA.replace('<!--SB-LINK-->', '<script>\n' + LINK_SRC + '\n</script>');
+if (PAGINA.includes('<!--SB-LINK-->')) PAGINA = PAGINA.replace('<!--SB-LINK-->', '<script>\n' + LINK_SRC + '\n</script>');
+else PAGINA = PAGINA.replace('<script>\n(function(){', '<script>\n' + LINK_SRC + '\n</script>\n<script>\n(function(){');
 if (!PAGINA.includes('SB_MAKE_PEER')) { console.error('FALHA ao injetar sb-link.js na página'); process.exit(1); }
 
 /* ---------- registro de peers (clientes ws + anfitriãs jsdom) ---------- */
 const peers = new Map();        // id → {enviar(obj), fecharLocal()}
 const links = new Set();        // "a|b" — conexões abertas entre dois peers
-const salas = new Map();        // codigo → {dom, janela, peerId, vaziaDesde, nome, modo}
+const salas = new Map();        // codigo → {dom, janela, peerId, vaziaDesde, nome, modo, pub}
 const mural = new Map();        // codigo → {codigo, nome, modo, jogs, senha, dono, ts}
 
 function entrega(de, m) {
   const ep = peers.get(m.to);
   if (!ep) return false;
-  const pacote = Object.assign({}, m, { from: de });
-  ep.enviar(pacote);
+  ep.enviar(Object.assign({}, m, { from: de }));
   return true;
 }
 function fechaLinksDe(id) {
@@ -58,6 +61,11 @@ function registraPeer(id, enviar) {
   peers.set(id, { enviar });
   return () => { if (peers.get(id) && peers.get(id).enviar === enviar) peers.delete(id); };
 }
+function conexoesDe(peerId) {
+  let n = 0;
+  for (const l of links) { const [a, b] = l.split('|'); if (a === peerId || b === peerId) n++; }
+  return n;
+}
 
 /* ---------- o MURAL (a lista pública de salas: /api/salas) ---------- */
 function muralApi(rota, corpo) {
@@ -73,6 +81,82 @@ function muralApi(rota, corpo) {
   }
   if (rota === '/api/salas/sair' && corpo) { mural.delete(String(corpo.codigo || '')); return { ok: true }; }
   return null;
+}
+
+/* ---------- v64: CHAT DA COMUNIDADE (em memória; some ao reiniciar) ---------- */
+const CHATS = { BRASIL: [], GLOBAL: [] };
+const chatRate = new Map();                            // ip → último envio
+function chatApi(canal, corpo, ip) {
+  canal = String(canal || '').toUpperCase();
+  if (!CHATS[canal]) return { erro: 'canal desconhecido' };
+  if (!corpo) return { msgs: CHATS[canal].slice(-50) };
+  const agora = Date.now();
+  if (chatRate.get(ip) > agora - 2000) return { ok: false };           // no máx. 1 msg a cada 2 s por IP
+  chatRate.set(ip, agora);
+  const de = String(corpo.de || 'Jogador').slice(0, 16), texto = String(corpo.texto || '').slice(0, 80).trim();
+  if (!texto) return { ok: false };
+  CHATS[canal].push({ de, texto, ts: agora });
+  if (CHATS[canal].length > 50) CHATS[canal].splice(0, CHATS[canal].length - 50);
+  return { ok: true };
+}
+
+/* ---------- v64: ID DE MEMBRO (o 1º jogador registrado é o ID 1) ---------- */
+const PERFIL_ARQ = path.join(DIR, 'perfis.json');
+let perfis = {};
+try { perfis = JSON.parse(fs.readFileSync(PERFIL_ARQ, 'utf8')); } catch (_) {}
+let proxId = Object.values(perfis).reduce((m, p) => Math.max(m, (p && p.id) | 0), 0) + 1;
+let perfisT = 0;
+function perfisSalvar() {
+  clearTimeout(perfisT);
+  perfisT = setTimeout(() => { try { fs.writeFileSync(PERFIL_ARQ, JSON.stringify(perfis)); } catch (_) {} }, 2000);
+}
+function perfilApi(corpo) {
+  const uid = String(corpo && corpo.uid || '').slice(0, 64);
+  if (!uid) return { erro: 'sem uid' };
+  const nome = String(corpo.nome || 'Jogador').slice(0, 8) || 'Jogador';
+  if (!perfis[uid]) { perfis[uid] = { id: proxId++, nome }; console.log('[perfil] ID %d → %s', perfis[uid].id, nome); }
+  else perfis[uid].nome = nome;
+  perfisSalvar();
+  return { id: perfis[uid].id };
+}
+
+/* ---------- v64: SALAS PÚBLICAS (formação automática) ---------- */
+const PUB_CFG = {
+  classico: { titulo: 'Arena Clássica', modo: 'classico', estadio: 'classico', quadra: 'volei' },
+  real:     { titulo: 'Real Soccer',    modo: 'classico', estadio: 'real',     quadra: 'volei' },
+  volei:    { titulo: 'Arena Vôlei',    modo: 'volei',    estadio: 'classico', quadra: 'volei' }
+};
+const PUB_LANES = [];
+for (const modo of ['classico', 'real', 'volei']) for (let i = 1; i <= 5; i++) PUB_LANES.push(modo + '-' + i);
+const pubVivas = new Map();                            // lane → codigo
+const pubValida = id => PUB_LANES.includes(String(id || ''));
+
+function pubConfig(lane) {
+  const [modo, i] = lane.split('-');
+  const c = PUB_CFG[modo];
+  return { nome: c.titulo + ' 0' + i, modo: c.modo, estadio: c.estadio, quadra: c.quadra, eu: -1, bots: [0, 0], nivel: [1, 1],
+    tempo: 3, gols: 3, prorrog: true, vel: 100, fis: {}, fisV: {}, v3: true, v2: true, vBloq: false, senha: '',
+    format: 4, custom: true, pub: true,
+    cores: [{ a: 0, t: '#ffffff', c: ['#ff4a19'] }, { a: 0, t: '#ffffff', c: ['#00bae5'] }] };
+}
+function pubLinha(lane) {
+  const codigo = pubVivas.get(lane), viva = codigo && salas.has(codigo);
+  const jogs = viva ? conexoesDe(salas.get(codigo).peerId) : 0;
+  return { id: lane, players: jogs, capacity: 8, bench: Math.max(0, jogs - 8), playing: jogs >= 2, full: jogs >= 11, code: viva ? codigo : null };
+}
+function pubEntrar(lane, pronto) {
+  if (!pubValida(lane)) return pronto({ erro: 'sala desconhecida' });
+  const codigo = pubVivas.get(lane);
+  if (codigo && salas.has(codigo)) return pronto({ code: codigo });
+  const novo = geraCodigo();
+  abreSalaServidor(novo, pubConfig(lane), c => { pubVivas.set(lane, c); pronto({ code: c }); }, erro => pronto({ erro }));
+}
+function pubRapido(modo, pronto) {
+  const lanes = PUB_LANES.filter(l => l.startsWith(modo === 'real' || modo === 'volei' ? modo : 'classico'));
+  if (!lanes.length) return pronto({ erro: 'modo desconhecido' });
+  const linhas = lanes.map(pubLinha);
+  const viva = linhas.filter(l => l.players > 0 && !l.full).sort((a, b) => b.players - a.players)[0];
+  pubEntrar(viva ? viva.id : lanes[0], pronto);
 }
 
 /* ---------- stubs de navegador para o jogo rodar dentro do Node ---------- */
@@ -105,7 +189,7 @@ function abreSalaServidor(codigo, salaCfg, pronto, falha) {
   let dom;
   try {
     dom = new JSDOM(PAGINA, {
-      url: 'http://localhost/',
+      url: 'http://localhost/?debug',
       runScripts: 'dangerously',
       pretendToBeVisual: true,
       beforeParse(window) {
@@ -122,13 +206,12 @@ function abreSalaServidor(codigo, salaCfg, pronto, falha) {
           enviar(o) {
             const de = this._id;
             if (o.t === 'd' || o.t === 'c') entrega(de, o);
-            else if (o.t === 'conn') { /* a anfitriã não inicia conexões */ }
           },
           fechar() { try { this._desreg && this._desreg(); } catch (_) {} }
         }));
         // o jogo chama fetch('/api/salas') para o mural: atende em processo, sem HTTP
         window.fetch = (url, o) => {
-          const rota = String(url);
+          const rota = String(url).split('?')[0];
           const corpo = o && o.body ? JSON.parse(o.body) : null;
           return Promise.resolve().then(() => {
             const r = muralApi(rota, corpo);
@@ -141,13 +224,14 @@ function abreSalaServidor(codigo, salaCfg, pronto, falha) {
           window.localStorage.setItem('streetball-salas-v1', seed);
           window.localStorage.setItem('sb-auto', codigo);
           window.localStorage.setItem('sb-sala', S.id);
+          if (S.pub) window.localStorage.setItem('sb-auto-teams', '1');   // v64: sala pública = formação automática
         } catch (_) {}
       }
     });
   } catch (e) { return falha('erro ao criar a sala: ' + e.message); }
 
   const janela = dom.window;
-  const sala = { dom, janela, peerId, codigo, vaziaDesde: Date.now(), nome: String(S.nome || 'Sala') };
+  const sala = { dom, janela, peerId, codigo, vaziaDesde: Date.now(), nome: String(S.nome || 'Sala'), pub: !!S.pub };
   salas.set(codigo, sala);
   console.log('[sala %s] criada (%s)', codigo, sala.nome);
 
@@ -162,47 +246,54 @@ function abreSalaServidor(codigo, salaCfg, pronto, falha) {
 function fechaSalaServidor(codigo) {
   const s = salas.get(codigo); if (!s) return;
   salas.delete(codigo); mural.delete(codigo);
+  for (const [lane, c] of pubVivas) if (c === codigo) pubVivas.delete(lane);
   try { fechaLinksDe(s.peerId); } catch (_) {}
-  try { const ep = peers.get(s.peerId); if (ep) peers.delete(s.peerId); } catch (_) {}
+  try { peers.delete(s.peerId); } catch (_) {}
   try { s.janela.close(); } catch (_) {}
   console.log('[sala %s] fechada', codigo);
 }
-// limpeza: sala sem ninguém por SALA_VAZIA_MS é derrubada (economia = menos cobrança)
+// limpeza: sala sem ninguém por SALA_VAZIA_MS é derrubada (economia e lista limpa)
 setInterval(() => {
   const agora = Date.now();
   for (const [codigo, s] of salas) {
-    let ocup = 0;
-    for (const l of links) { const [a, b] = l.split('|'); if (a === s.peerId || b === s.peerId) ocup++; }
-    if (ocup > 0) { s.vaziaDesde = agora; continue; }
+    if (conexoesDe(s.peerId) > 0) { s.vaziaDesde = agora; continue; }
     if (agora - s.vaziaDesde > SALA_VAZIA_MS) fechaSalaServidor(codigo);
   }
-}, 30000);
+}, 15000);
 
-/* ---------- HTTP: o jogo, os arquivos e o mural ---------- */
+/* ---------- HTTP: o jogo, os arquivos e as APIs ---------- */
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
-  const url = decodeURIComponent((req.url || '/').split('?')[0]);
-  if (url.startsWith('/api/')) {
-    const responder = r => { res.writeHead(r === null ? 404 : 200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify(r || { erro: 'não encontrado' })); };
-    if (url === '/api/salas/criar' && req.method === 'POST') {
-      let corpo = '';
-      req.on('data', d => { corpo += d; if (corpo.length > 20000) req.destroy(); });
-      req.on('end', () => {
-        let j = null; try { j = JSON.parse(corpo); } catch (_) {}
-        const cfg = j && j.sala;
-        if (!cfg || typeof cfg !== 'object') return responder({ erro: 'configuração inválida' });
-        const codigo = geraCodigo();
-        abreSalaServidor(codigo, cfg, c => responder({ codigo: c }), erro => responder({ erro }));
-      });
-      return;
-    }
-    if (req.method === 'POST') {
-      let corpo = ''; req.on('data', d => { corpo += d; if (corpo.length > 20000) req.destroy(); });
-      req.on('end', () => { let j = null; try { j = JSON.parse(corpo); } catch (_) {} ; responder(muralApi(url, j)); });
-      return;
-    }
+  const u = new URL(req.url || '/', 'http://x');
+  const url = decodeURIComponent(u.pathname);
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString().split(',')[0];
+  const responder = (r, status) => { res.writeHead(status || (r === null ? 404 : 200), { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify(r || { erro: 'não encontrado' })); };
+  const lerCorpo = fn => {
+    let corpo = '';
+    req.on('data', d => { corpo += d; if (corpo.length > 20000) req.destroy(); });
+    req.on('end', () => { let j = null; try { j = JSON.parse(corpo); } catch (_) {} ; fn(j); });
+  };
+
+  if (url === '/api/salas' || url === '/api/salas/sair') {
+    if (req.method === 'POST') return lerCorpo(j => responder(muralApi(url, j)));
     return responder(muralApi(url, null));
   }
+  if (url === '/api/salas/criar' && req.method === 'POST') {
+    return lerCorpo(j => {
+      const cfg = j && j.sala;
+      if (!cfg || typeof cfg !== 'object') return responder({ erro: 'configuração inválida' });
+      abreSalaServidor(geraCodigo(), cfg, c => responder({ codigo: c }), erro => responder({ erro }));
+    });
+  }
+  if (url === '/api/chat') {
+    if (req.method === 'POST') return lerCorpo(j => responder(chatApi(u.searchParams.get('canal') || (j && j.canal), j, ip)));
+    return responder(chatApi(u.searchParams.get('canal'), null, ip));
+  }
+  if (url === '/api/perfil' && req.method === 'POST') return lerCorpo(j => responder(perfilApi(j)));
+  if (url === '/api/publicas') return responder({ salas: PUB_LANES.map(pubLinha) });
+  if (url === '/api/publicas/entrar' && req.method === 'POST') return lerCorpo(j => pubEntrar(j && j.id, responder));
+  if (url === '/api/publicas/rapido' && req.method === 'POST') return lerCorpo(j => pubRapido(j && j.modo, responder));
+
   if (url === '/ws') { res.writeHead(426); return res.end('websocket'); }
   if (url === '/' || url === '/index.html') {          // o jogo vai com o transporte (sb-link) injetado
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
