@@ -6,7 +6,7 @@
    e recebem o estado — por isso a internet deles quase não importa.
 
    v64: salas PÚBLICAS (formação automática) · chat da comunidade (BRASIL/GLOBAL) ·
-   ID de membro · sala vazia fecha em 90 s · partida rápida.
+   ID de membro · sala vazia fecha em 5 s · partida rápida.
 
    Uso:  node servidor.js   (porta 3000, ou PORT=xxxx)
    Deps: npm install  (ws + jsdom)
@@ -22,7 +22,7 @@ const PORT = +(process.env.PORT || 3000);
 const DIR = __dirname;
 const NET_PRE = 'streetball-v52-';
 const MAX_SALAS = +(process.env.MAX_SALAS || 6);       // salas simultâneas (públicas + personalizadas)
-const SALA_VAZIA_MS = 90 * 1000;                       // sala sem ninguém fecha em 90 s (e sai da lista)
+const SALA_VAZIA_MS = 5 * 1000;                        // v65: sala sem ninguém fecha em 5 s (e sai da lista)
 const MURAL_TTL_MS = 90 * 1000;                        // registro do mural some se o anfitrião parar de avisar
 
 require('./sb-link.js');                               // define globalThis.SB_MAKE_PEER
@@ -259,7 +259,7 @@ setInterval(() => {
     if (conexoesDe(s.peerId) > 0) { s.vaziaDesde = agora; continue; }
     if (agora - s.vaziaDesde > SALA_VAZIA_MS) fechaSalaServidor(codigo);
   }
-}, 15000);
+}, 5000);
 
 /* ---------- HTTP: o jogo, os arquivos e as APIs ---------- */
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json' };
