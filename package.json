@@ -1,0 +1,13 @@
+{
+  "name": "streetball-servidor",
+  "version": "1.0.0",
+  "description": "Servidor dedicado do Streetball: as salas rodam na nuvem (Node + jsdom + WebSocket).",
+  "main": "servidor.js",
+  "scripts": {
+    "start": "node servidor.js"
+  },
+  "dependencies": {
+    "jsdom": "^24.1.0",
+    "ws": "^8.18.0"
+  }
+}
