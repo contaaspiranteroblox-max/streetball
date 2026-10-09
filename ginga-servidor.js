@@ -152,9 +152,9 @@ const FIS = {
   tick: 60, pr: 26, pInv: .65, acc: 23.454548, rev: 2, damp: .88, idle: .72, mom: .92, cruise: 226, vmax: 252,
   reachMul: 1.4, reachPad: 6, kick: 520, kickCd: .15, grace: .2, passMul: .6, recuo: .16,
   // bola mais leve (GINGA 3): pesa menos que o jogador, rola mais e sai mais longe no toque
-  br: 10, bInv: 1.6, bDamp: .989, bounce: .5, pbMin: .05, pbMax: .3, pbScale: .06, wallB: .85, postB: .95, postR: 8, oob: 3,
+  br: 11, bInv: 1.85, bDamp: .983, bounce: .5, pbMin: .05, pbMax: .3, pbScale: .06, wallB: .85, postB: .95, postR: 8, oob: 3,
   // GINGA: segurar o CHUTE antes de chegar na bola carrega o chute forte (mais rápido e sem frear tanto)
-  cargaIni: .08, cargaDur: .4, cargaLento: .92, forteMul: 1.5, forteCd: 2.2, forteMin: .6,
+  cargaIni: .08, cargaDur: .4, cargaLento: .92, forteMul: 1.28, forteCd: 2.2, forteMin: .6,
   duploJan: .14, duploMul: .5
 };
 const ARENAS = {
@@ -1145,6 +1145,7 @@ function mensagem(c, m){
     case 'ajustes': ajustes(jog, m); break;
     case 'chat': chat(jog, c, m); break;
     case 'dig': { const s = jog.sala; if (s && membroDe(s, jog.id)) s.manda({ t: 'dig', id: jog.id, on: m.on ? 1 : 0 }); break; }
+    case 'pulaRep': pulaReplay(jog); break;
     case 'in': entrada(jog, m); break;
   }
 }
@@ -1443,6 +1444,18 @@ function tiraDaPartida(s, mb){
   p.toques = p.toques.filter(tq => tq.j);
   if (!p.jog.some(x => x.time === 0) || !p.jog.some(x => x.time === 1)) setImmediate(() => { if (s.p === p) paraPartida(s, 'Um dos times ficou vazio: partida parada'); });
 }
+// todo mundo pulou o replay → a partida volta na hora (sem esperar os 4,6 s)
+function pulaReplay(jog){
+  const s = jog.sala; if (!s || !s.p || s.fase !== 'replay') return;
+  s.pulaRep = s.pulaRep || new Set();
+  if (s.pulaRep.has(jog.id)) return;
+  s.pulaRep.add(jog.id);
+  const jogs = s.membros.filter(m => m.jog && m.bot == null && m.time !== ESPECTADOR);
+  const n = jogs.filter(m => s.pulaRep.has(m.id)).length;
+  if (jogs.length > 1) s.manda({ t: 'pulaRep', tx: `${jog.nome} pulou o replay (${n}/${jogs.length})` });
+  if (jogs.length && n >= jogs.length) s.faseT = 99;   // todos pularam: acelera a fase
+}
+
 function paraPartida(s, tx){
   if (!s.p) return;
   s.p = null; s.status = 'espera'; s.fase = null; s.pausada = false; s.suja = true; listaSuja = true; s.autoT = 0;
@@ -1488,7 +1501,7 @@ function passoSala(s, dt){
       if (s.tempo <= 0){ s.tempo = 0; if (s.placar[0] === s.placar[1] && s.cfg.ouro) s.ouro = true; else return fimPartida(s); }
     }
     if (s.fase === 'gol' && s.faseT > 2.4){
-      if (CONFIG.replay) mudaFase(s, 'replay');
+      if (CONFIG.replay){ s.pulaRep = new Set(); mudaFase(s, 'replay'); }
       else if (acabou(s)) return fimPartida(s);
       else { p.saida(); IA.reset(p); for (const j of p.jog) j.travado = true; p.golLigado = true; p.toques.length = 0; s.conta = 0; mudaFase(s, 'saida'); }
     }
