@@ -150,7 +150,7 @@ function spriteBotao(v, anel, rpx){
 // ======================================================================= FÍSICA do GINGA (botões, bola, paredes e traves)
 const FIS = {
   tick: 60, pr: 26, pInv: .65, acc: 23.454548, rev: 2, damp: .88, idle: .72, mom: .92, cruise: 226, vmax: 252,
-  reachMul: 1.4, reachPad: 6, kick: 520, kickCd: .15, grace: .2, passMul: .6, recuo: .16,
+  reachMul: 1.4, reachPad: 6, kick: 570, kickCd: .15, grace: .2, passMul: .6, recuo: .16,
   // bola mais leve (GINGA 3): pesa menos que o jogador, rola mais e sai mais longe no toque
   br: 11, bInv: 1.85, bDamp: .983, bounce: .5, pbMin: .05, pbMax: .3, pbScale: .06, wallB: .85, postB: .95, postR: 8, oob: 3,
   // GINGA: segurar o CHUTE antes de chegar na bola carrega o chute forte (mais rápido e sem frear tanto)
@@ -171,7 +171,7 @@ const FORMACOES = [
 const SOMA_BOLA = 1 / (FIS.tick * (1 - FIS.bDamp));   // quanto a bola anda por unidade de velocidade até parar
 // JOGABILIDADE: LEVE (o botão responde na hora e quase não desliza) · CLÁSSICA (com inércia: o botão desliza mais)
 const MOVIMENTO = {
-  leve:     { acc: 48, rev: 3.4, damp: .74, idle: .4, mom: .76 },
+  leve:     { acc: 64, rev: 4.2, damp: .68, idle: .35, mom: .72 },
   classica: { acc: FIS.acc, rev: FIS.rev, damp: FIS.damp, idle: FIS.idle, mom: FIS.mom }
 };
 
