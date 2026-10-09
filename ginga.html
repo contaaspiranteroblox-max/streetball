@@ -1164,7 +1164,7 @@ function saveBase(){
     modo: { n: 2, dif: 1, dur: 180, hora: 'por', rq: 2 },
     salasLocais: [],
     hud: { paisagem: {}, retrato: {} },
-    cfg: { graf: '', grafMao: false, res: 1, fps: false, musica: 70, efeitos: 85, torcida: 70, opac: 90, vibra: true, mira: true, canhoto: false, joy: 'fixo', camera: 'auto', zoom: 1, replay: true, nomes: true, mini: true, jogab: 'leve', servidor: '', atraso: 30 },
+    cfg: { graf: '', grafMao: false, res: 1, fps: false, musica: 70, efeitos: 0, torcida: 70, opac: 90, vibra: true, mira: true, canhoto: false, joy: 'fixo', camera: 'auto', zoom: 1, replay: true, nomes: true, mini: true, jogab: 'leve', servidor: '', atraso: 30 },
     tutorial: false, intro: false, salvoEm: 0
   };
 }
@@ -1194,6 +1194,7 @@ let chaveSave = CHAVE;
 { const s = sessaoSalva(); if (s) chaveSave = CHAVE + ':' + s.chave; }
 function carregar(chave){ return mergeFundo(saveBase(), lerJSON(chave || chaveSave)); }
 let S = carregar();
+if (S.cfg.efeitos === 85){ S.cfg.efeitos = 0; salvar(); }   // efeitos agora vêm desligados (liga em AJUSTES se quiser)
 let salvarT = 0, aoSalvar = null;
 function salvar(){ clearTimeout(salvarT); salvarT = setTimeout(() => { S.salvoEm = Date.now(); try { localStorage.setItem(chaveSave, JSON.stringify(S)); } catch (_) {} if (aoSalvar) aoSalvar(); }, 120); }
 function salvarJa(){ clearTimeout(salvarT); try { localStorage.setItem(chaveSave, JSON.stringify(S)); } catch (_) {} }
@@ -1815,9 +1816,9 @@ const FIS = {
   tick: 60, pr: 26, pInv: .65, acc: 23.454548, rev: 2, damp: .88, idle: .72, mom: .92, cruise: 226, vmax: 252,
   reachMul: 1.4, reachPad: 6, kick: 520, kickCd: .15, grace: .2, passMul: .6, recuo: .16,
   // bola mais leve (GINGA 3): pesa menos que o jogador, rola mais e sai mais longe no toque
-  br: 10, bInv: 1.6, bDamp: .989, bounce: .5, pbMin: .05, pbMax: .3, pbScale: .06, wallB: .85, postB: .95, postR: 8, oob: 3,
+  br: 11, bInv: 1.85, bDamp: .983, bounce: .5, pbMin: .05, pbMax: .3, pbScale: .06, wallB: .85, postB: .95, postR: 8, oob: 3,
   // GINGA: segurar o CHUTE antes de chegar na bola carrega o chute forte (mais rápido e sem frear tanto)
-  cargaIni: .08, cargaDur: .4, cargaLento: .92, forteMul: 1.5, forteCd: 2.2, forteMin: .6,
+  cargaIni: .08, cargaDur: .4, cargaLento: .92, forteMul: 1.28, forteCd: 2.2, forteMin: .6,
   duploJan: .14, duploMul: .5
 };
 const ARENAS = {
@@ -5334,6 +5335,7 @@ const Rede = {
       case 'rk': Conta.recebeRk(m); break;
       case 'ranking': case 'perfilDe': Ranking.recebe(m); break;
       case 'renomeou': Conta.renomeou(m); break;
+      case 'pulaRep': if (m.tx) aviso(m.tx, 2); break;   // alguém pulou o replay (x/y)
       case 'dig': {
         if (typeof R !== 'undefined' && R.p) for (const j of R.p.jog){ if (String(j.id) === String(m.id)) j.digAte = m.on ? performance.now() + 2600 : 0; }
         break;
@@ -5959,7 +5961,7 @@ const Jogo = {
     p.aplicaQuadro(r.quadros[0]); p.aplicaQuadro(r.quadros[0]);
     HUD.replay(true); HUD.selo('REPLAY', true); HUD.limpaMsg();
     R.rastro.length = 0;
-    const pula = () => { if (this.fase === 'replay') this.fimReplay(); };
+    const pula = () => { if (this.fase !== 'replay') return; if (this.online) try { Rede.envia({ t: 'pulaRep' }); } catch (_) {} this.fimReplay(); };
     $('#pular').onclick = pula; R.cv.onclick = pula;
   },
   passoReplay(dt){
