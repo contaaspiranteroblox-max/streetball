@@ -1,0 +1,10 @@
+MUDANCAS v65 (ja no ar no servidor):
+
+1. Movimento SEM DESLIZAR: o botao anda e para na hora (estilo Arcade), em todos os modos.
+2. Extrapolacao padrao 0 (menos lag em internet ruim).
+3. Caiu no meio da partida? Ao voltar com o mesmo nome, voce RECUPERA seu botao na hora
+   (o bot que segurava o lugar sai — nada de player duplicado).
+4. Sala sem nenhum jogador e excluida em 5 segundos (some da lista sozinha).
+
+Para atualizar o index.html no repositorio: suba o arquivo novo por
+Add file > Upload files no github.com (o servidor ja esta com a versao nova).
