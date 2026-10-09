@@ -149,8 +149,8 @@ function spriteBotao(v, anel, rpx){
 // ---- 30-sim.js (o mesmo código do jogo) ----
 // ======================================================================= FÍSICA do GINGA (botões, bola, paredes e traves)
 const FIS = {
-  tick: 60, pr: 26, pInv: .65, acc: 23.454548, rev: 2, damp: .88, idle: .72, mom: .92, cruise: 208, vmax: 232,
-  reachMul: 1.4, reachPad: 6, kick: 520, kickCd: .15, grace: .2, passMul: .6,
+  tick: 60, pr: 26, pInv: .65, acc: 23.454548, rev: 2, damp: .88, idle: .72, mom: .92, cruise: 226, vmax: 252,
+  reachMul: 1.4, reachPad: 6, kick: 520, kickCd: .15, grace: .2, passMul: .6, recuo: .16,
   // bola mais leve (GINGA 3): pesa menos que o jogador, rola mais e sai mais longe no toque
   br: 10, bInv: 1.6, bDamp: .989, bounce: .5, pbMin: .05, pbMax: .3, pbScale: .06, wallB: .85, postB: .95, postR: 8, oob: 3,
   // GINGA: segurar o CHUTE antes de chegar na bola carrega o chute forte (mais rápido e sem frear tanto)
@@ -297,6 +297,7 @@ class Partida {
       j.st.passes++;
     }
     if (fixa){ b.vx = nx * f; b.vy = ny * f; } else { b.vx += nx * f; b.vy += ny * f; }
+    if (k !== 'passe'){ j.vx -= nx * f * FIS.recuo; j.vy -= ny * f * FIS.recuo; }   // mamoball: o chute empurra o jogador um pouco para trás
     j.kickCd = FIS.kickCd; consome(j.kL); consome(j.pL); j.segura = 0; const carga = j.carga; j.carga = 0;
     j.ultChuteT = this.t; j.ultBotao = k === 'passe' ? 'p' : 'k'; j._ultK = k;
     this.tocou(j);
@@ -736,6 +737,7 @@ function cfgSala(c){
     tempo: SALA.tempos.includes(+c.tempo) ? +c.tempo : 3,
     gols: SALA.gols.includes(+c.gols) ? +c.gols : 5,
     ouro: c.ouro !== false,
+    trocaJogo: c.trocaJogo !== false,
     hora: HORAS_SALA.includes(c.hora) ? c.hora : 'por',
     jogab: c.jogab === 'classica' ? 'classica' : 'leve'
   };
@@ -1348,7 +1350,7 @@ function comando(jog, m){
       if (alvo.id !== jog.id && !dono) return erro(jog, 'proibido', 'Só o dono move os outros');
       if (t !== ESPECTADOR){
         if (vagasTime(s, t) <= 0) return erro(jog, 'cheia', `O ${NOMES_TIME[t]} está cheio`);
-        if (s.status === 'jogo' && !dono) return erro(jog, 'jogo', 'Espere a partida acabar');
+        if (s.status === 'jogo' && !dono && !(s.cfg && s.cfg.trocaJogo)) return erro(jog, 'jogo', 'Espere a partida acabar');   // (com a opção ligada, cada um se mexe sozinho)
       } else if (s.membros.filter(x => x.time === ESPECTADOR).length >= SALA.espMax) return erro(jog, 'cheia', 'Não cabe mais ninguém assistindo');
       const antes = alvo.time; alvo.time = t; s.suja = true; listaSuja = true;
       if (s.p){ if (antes !== ESPECTADOR) tiraDaPartida(s, alvo); if (t !== ESPECTADOR) adicionaNaPartida(s, alvo); }
