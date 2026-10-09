@@ -1812,8 +1812,8 @@ const meuRastro = () => RASTRO[S.loja.rastro] || RASTROS[0];
 /* ---- 30-sim.js ---- */
 // ======================================================================= FÍSICA do GINGA (botões, bola, paredes e traves)
 const FIS = {
-  tick: 60, pr: 26, pInv: .65, acc: 23.454548, rev: 2, damp: .88, idle: .72, mom: .92, cruise: 208, vmax: 232,
-  reachMul: 1.4, reachPad: 6, kick: 520, kickCd: .15, grace: .2, passMul: .6,
+  tick: 60, pr: 26, pInv: .65, acc: 23.454548, rev: 2, damp: .88, idle: .72, mom: .92, cruise: 226, vmax: 252,
+  reachMul: 1.4, reachPad: 6, kick: 520, kickCd: .15, grace: .2, passMul: .6, recuo: .16,
   // bola mais leve (GINGA 3): pesa menos que o jogador, rola mais e sai mais longe no toque
   br: 10, bInv: 1.6, bDamp: .989, bounce: .5, pbMin: .05, pbMax: .3, pbScale: .06, wallB: .85, postB: .95, postR: 8, oob: 3,
   // GINGA: segurar o CHUTE antes de chegar na bola carrega o chute forte (mais rápido e sem frear tanto)
@@ -1960,6 +1960,7 @@ class Partida {
       j.st.passes++;
     }
     if (fixa){ b.vx = nx * f; b.vy = ny * f; } else { b.vx += nx * f; b.vy += ny * f; }
+    if (k !== 'passe'){ j.vx -= nx * f * FIS.recuo; j.vy -= ny * f * FIS.recuo; }   // mamoball: o chute empurra o jogador um pouco para trás
     j.kickCd = FIS.kickCd; consome(j.kL); consome(j.pL); j.segura = 0; const carga = j.carga; j.carga = 0;
     j.ultChuteT = this.t; j.ultBotao = k === 'passe' ? 'p' : 'k'; j._ultK = k;
     this.tocou(j);
@@ -2399,6 +2400,7 @@ function cfgSala(c){
     tempo: SALA.tempos.includes(+c.tempo) ? +c.tempo : 3,
     gols: SALA.gols.includes(+c.gols) ? +c.gols : 5,
     ouro: c.ouro !== false,
+    trocaJogo: c.trocaJogo !== false,
     hora: HORAS_SALA.includes(c.hora) ? c.hora : 'por',
     jogab: c.jogab === 'classica' ? 'classica' : 'leve'
   };
@@ -4819,6 +4821,7 @@ const Salas = {
       ${grupo('HORÁRIO', 'hora', [['tarde', 'TARDE'], ['por', 'PÔR DO SOL'], ['noite', 'NOITE']], 'c3')}
       ${grupo('JOGABILIDADE', 'jogab', [['leve', 'LEVE', 'quase não desliza'], ['classica', 'CLÁSSICA', 'com inércia']], 'c2')}
       <div class="cs-linha cs-full"><span>GOL DE OURO NO EMPATE<small style="display:block;font:15px var(--fonte2);font-style:normal;color:var(--sub)">se acabar o tempo empatado, quem marcar primeiro vence</small></span><button type="button" class="sw-b" role="switch" id="cs-ouro" aria-checked="${f.cfg.ouro}" aria-label="Gol de ouro"${editavel ? '' : ' disabled'}></button></div>
+      <div class="cs-linha cs-full"><span>TROCAR DE TIME NA PARTIDA<small style="display:block;font:15px var(--fonte2);font-style:normal;color:var(--sub)">com a bola rolando, dá para ir para o outro time ou para os espectadores</small></span><button type="button" class="sw-b" role="switch" id="cs-troca" aria-checked="${f.cfg.trocaJogo !== false}" aria-label="Trocar de time na partida"${editavel ? '' : ' disabled'}></button></div>
     </div>`;
   },
   ligaForm(c, f){
@@ -4830,6 +4833,7 @@ const Salas = {
       c.querySelectorAll(`.chip[data-k="${k}"]`).forEach(x => x.classList.toggle('on', x === b));
     }));
     const ouro = $('#cs-ouro', c); if (ouro) ouro.addEventListener('click', () => { f.cfg.ouro = !f.cfg.ouro; ouro.setAttribute('aria-checked', String(f.cfg.ouro)); Som.ui(f.cfg.ouro ? 'liga' : 'desliga'); });
+    const tj = $('#cs-troca', c); if (tj) tj.addEventListener('click', () => { f.cfg.trocaJogo = !(f.cfg.trocaJogo !== false); tj.setAttribute('aria-checked', String(f.cfg.trocaJogo)); Som.ui(f.cfg.trocaJogo ? 'liga' : 'desliga'); });
     const nome = $('#cs-nome', c); if (nome) nome.addEventListener('input', () => { f.nome = nome.value; });
   },
   mostraCriar(){
@@ -4913,7 +4917,7 @@ const Salas = {
         b.addEventListener('click', e => { e.stopPropagation(); this.menuMembro(m, b); });
       });
       const pe = $('.sa-pe', sec), bts = [];
-      const podeMudar = eu && eu.time !== t && (!jogo || s.local || t === ESPECTADOR);
+      const podeMudar = eu && eu.time !== t && (!jogo || s.local || t === ESPECTADOR || (s.cfg && s.cfg.trocaJogo));   // trocaJogo
       if (podeMudar && (t === ESPECTADOR || vagasTime(s, t) > 0)) bts.push(`<button type="button" class="bt3d mini${t === ESPECTADOR ? ' cinza' : ' verde'}" data-ir="${t}">${t === ESPECTADOR ? IC.olho + 'ASSISTIR' : 'ENTRAR'}</button>`);
       if (dono && t !== ESPECTADOR && vagasTime(s, t) > 0 && s.tipo !== 'oficial') bts.push(`<button type="button" class="bt3d mini cinza" data-bot="${t}">${IC.robo}+ BOT</button>`);
       pe.innerHTML = bts.join(''); pe.hidden = !bts.length;
@@ -5001,7 +5005,7 @@ const Salas = {
     const ops = [];
     for (const t of [0, ESPECTADOR, 1]){
       if (m.time === t) continue;
-      if (t !== ESPECTADOR && (vagasTime(s, t) <= 0 || (jogo && !dono))) continue;
+      if (t !== ESPECTADOR && (vagasTime(s, t) <= 0 || (jogo && !dono && !(s.cfg && s.cfg.trocaJogo)))) continue;   // trocaJogo: cada um se mexe mesmo na partida
       ops.push(`<button type="button" class="bt3d ${t === 0 ? 'vermelho' : t === 1 ? '' : 'cinza'}" data-t="${t}">${t === ESPECTADOR ? IC.olho + 'PARA OS ESPECTADORES' : 'PARA O ' + NOMES_TIME[t]}</button>`);
     }
     if (dono && !euMesmo && m.bot == null && !s.local) ops.push(`<button type="button" class="bt3d amarelo" data-c="dono">${IC.ok}PASSAR O DONO</button>`);
@@ -6182,7 +6186,7 @@ const Jogo = {
     const s = Salas.sala, pal = $('#sobre-palco');
     if (!s){ this.fechaPainel(); return; }
     const dono = Salas.souDono, lista = t => s.membros.filter(m => m.time === t);
-    const li = m => `<li><canvas width="10" height="10" data-v="${esc(String(m.id))}"></canvas>${seloHtml(m.vf)}${esc(m.nome)}${m.id === Rede.id ? ' <small style="color:var(--sol)">(você)</small>' : ''}${m.bot != null ? ' <small style="color:var(--tx3)">bot</small>' : ''}</li>`;
+    const li = m => `<li data-mid="${esc(String(m.id))}" style="cursor:pointer"><canvas width="10" height="10" data-v="${esc(String(m.id))}"></canvas>${seloHtml(m.vf)}${esc(m.nome)}${m.id === Rede.id ? ' <small style="color:var(--sol)">(você)</small>' : ''}${m.bot != null ? ' <small style="color:var(--tx3)">bot</small>' : ''}</li>`;
     const aberto = !!this.painel;
     pal.innerHTML = `<div class="cx larga" style="padding:26px 34px"><h2 style="font-size:52px;color:var(--sol)">${esc(s.nome)}</h2>
       <div class="sj-grade">${[0, 1].map(t => `<div class="sj-time" style="--tc:${CORES_TIME[t]}"><header>${NOMES_TIME[t]} · ${this.p ? this.p.placar[t] : 0}</header><ul>${lista(t).map(li).join('') || '<li style="color:var(--tx3)">ninguém</li>'}</ul></div>`).join('')}</div>
@@ -6197,6 +6201,15 @@ const Jogo = {
     pal.querySelectorAll('canvas[data-v]').forEach(cv => { const m = s.membros.find(x => String(x.id) === cv.dataset.v); if (!m) return; const v = visualLimpo(m.visual); pintaBotao(cv, 38, { desenho: v.desenho, texto: v.texto, cor: corDoVisual(v, CORES_TIME[m.time] || '#888') }); });
     this.chatSala();
     $('#sj-form').addEventListener('submit', e => { e.preventDefault(); const i = $('#sj-in'), t = limpaTexto(i.value, SALA.chatMax); if (!t) return; i.value = ''; Salas.fala(t); });
+    // mexer jogador de time com a partida rolando: o dono move qualquer um; com TROCAR DE TIME NA PARTIDA, cada um se move
+    pal.querySelectorAll('li[data-mid]').forEach(el => el.addEventListener('click', () => {
+      const m = s.membros.find(x => String(x.id) === el.dataset.mid); if (!m) return;
+      const dono = Salas.souDono, euMesmo = m.id === Rede.id, troca = s.cfg && s.cfg.trocaJogo !== false;
+      if (!dono && !(euMesmo && troca)){ Som.ui('erro'); return; }
+      Som.ui('abre');
+      const c = Telas.pop(`<span class="tag">NA HORA</span><h2 style="font-size:34px">${esc(m.nome).toUpperCase()}</h2><p>Mover mesmo com a partida rolando:</p><div class="pop-acoes" style="flex-direction:column;gap:10px">${[0, 1, ESPECTADOR].filter(t => t !== m.time).map(t => `<button type="button" class="bt3d ${t === 0 ? 'vermelho' : t === ESPECTADOR ? 'cinza' : ''}" data-tt="${t}">${t === ESPECTADOR ? 'ESPECTADORES' : 'TIME ' + NOMES_TIME[t]}</button>`).join('')}</div>`);
+      c.querySelectorAll('[data-tt]').forEach(b => b.addEventListener('click', () => { Som.ui('toque'); Telas.popFecha && Telas.popFecha(); Salas.acao('time', { alvo: m.id, time: +b.dataset.tt }); }));
+    }));
     $('#sj-volta').addEventListener('click', () => { Som.ui('fecha'); this.fechaPainel(); });
     const on = (id, f) => { const e = $(id); if (e) e.addEventListener('click', f); };
     on('#sj-pausa', () => { Som.ui('toque'); Salas.acao(this.pausaOn ? 'continuar' : 'pausar'); });
