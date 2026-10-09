@@ -23,6 +23,7 @@
   color-scheme:dark;
 }
 html,body{ height:100%; background:#0b0f26; }
+*{ touch-action:manipulation; }   /* iPhone: sem zoom de dois toques em lugar nenhum (as listas com rolagem têm pan-y próprio) */
 body{ margin:0; overflow:hidden; color:var(--txt); font-family:var(--fonte); font-weight:400; letter-spacing:.3px;
   touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; overscroll-behavior:none; }
 button{ font-family:inherit; font-weight:inherit; color:inherit; cursor:pointer; touch-action:manipulation; -webkit-appearance:none; appearance:none; border:0; padding:0; margin:0; background:none; letter-spacing:inherit; }
@@ -698,6 +699,9 @@ canvas{ display:block; }
 .h-pausa svg{ width:46%; height:46%; }
 .h-pausa:active{ transform:translate(-50%, -50%) scale(.9); }
 .h-pausa.sala svg{ width:56%; height:56%; }
+#h-editar{ position:absolute; left:50%; top:max(64px, calc(env(safe-area-inset-top,0px) + 58px)); transform:translateX(-50%); width:38px; height:38px; border-radius:12px; display:grid; place-items:center; color:#fff; background:rgba(10,16,40,.55); box-shadow:inset 0 0 0 2px rgba(255,255,255,.22); opacity:.8; z-index:40; }
+#h-editar svg{ width:55%; height:55%; }
+#h-editar:active{ transform:translateX(-50%) scale(.9); opacity:1; }
 #placar{ position:absolute; left:50%; top:max(8px, env(safe-area-inset-top)); transform:translateX(-50%); display:flex; align-items:stretch; height:clamp(40px, 9.5vmin, 58px);
   border-radius:16px; overflow:hidden; background:rgba(13,20,50,.9); border:3px solid #070b1e; box-shadow:0 6px 14px rgba(0,0,0,.4); pointer-events:none; font-size:clamp(15px, 4.4vmin, 28px); font-style:italic; }
 .pl-t{ display:flex; align-items:center; gap:clamp(6px, 1.4vmin, 10px); padding:0 clamp(8px, 2vmin, 16px); }
@@ -1044,6 +1048,7 @@ canvas{ display:block; }
     <button type="button" id="pular" hidden>PULAR ▸</button>
     <div id="fps" hidden></div>
     <div id="rede-info" hidden></div>
+    <button type="button" id="h-editar" aria-label="Editar botões" title="Editar botões"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.2-4.2L16.5 4.5a2.4 2.4 0 0 1 3.4 0l.6.6a2.4 2.4 0 0 1 0 3.4L9.2 19.8z" fill="currentColor"/><path d="M3.5 21.5h17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
   </div>
 
   <!-- chat da sala sempre embaixo, também durante a partida -->
@@ -1159,7 +1164,7 @@ function saveBase(){
     modo: { n: 2, dif: 1, dur: 180, hora: 'por', rq: 2 },
     salasLocais: [],
     hud: { paisagem: {}, retrato: {} },
-    cfg: { graf: '', grafMao: false, res: 1, fps: false, musica: 70, efeitos: 85, torcida: 70, opac: 90, vibra: true, mira: true, canhoto: false, joy: 'fixo', camera: 'auto', zoom: 1, replay: true, nomes: true, mini: true, jogab: 'leve', servidor: '', atraso: 70 },
+    cfg: { graf: '', grafMao: false, res: 1, fps: false, musica: 70, efeitos: 85, torcida: 70, opac: 90, vibra: true, mira: true, canhoto: false, joy: 'fixo', camera: 'auto', zoom: 1, replay: true, nomes: true, mini: true, jogab: 'leve', servidor: '', atraso: 30 },
     tutorial: false, intro: false, salvoEm: 0
   };
 }
@@ -1807,10 +1812,10 @@ const meuRastro = () => RASTRO[S.loja.rastro] || RASTROS[0];
 /* ---- 30-sim.js ---- */
 // ======================================================================= FÍSICA do GINGA (botões, bola, paredes e traves)
 const FIS = {
-  tick: 60, pr: 21, pInv: .65, acc: 23.454548, rev: 2, damp: .88, idle: .72, mom: .92, cruise: 208, vmax: 232,
-  reachMul: 1.4, reachPad: 6, kick: 450, kickCd: .15, grace: .2, passMul: .55,
+  tick: 60, pr: 26, pInv: .65, acc: 23.454548, rev: 2, damp: .88, idle: .72, mom: .92, cruise: 208, vmax: 232,
+  reachMul: 1.4, reachPad: 6, kick: 520, kickCd: .15, grace: .2, passMul: .6,
   // bola mais leve (GINGA 3): pesa menos que o jogador, rola mais e sai mais longe no toque
-  br: 10, bInv: 1.6, bDamp: .989, bounce: .5, pbMin: .05, pbMax: .3, pbScale: .06, wallB: .7, postB: .95, postR: 8, oob: 3,
+  br: 10, bInv: 1.6, bDamp: .989, bounce: .5, pbMin: .05, pbMax: .3, pbScale: .06, wallB: .85, postB: .95, postR: 8, oob: 3,
   // GINGA: segurar o CHUTE antes de chegar na bola carrega o chute forte (mais rápido e sem frear tanto)
   cargaIni: .08, cargaDur: .4, cargaLento: .92, forteMul: 1.5, forteCd: 2.2, forteMin: .6,
   duploJan: .14, duploMul: .5
@@ -1829,7 +1834,7 @@ const FORMACOES = [
 const SOMA_BOLA = 1 / (FIS.tick * (1 - FIS.bDamp));   // quanto a bola anda por unidade de velocidade até parar
 // JOGABILIDADE: LEVE (o botão responde na hora e quase não desliza) · CLÁSSICA (com inércia: o botão desliza mais)
 const MOVIMENTO = {
-  leve:     { acc: 36, rev: 2.4, damp: .815, idle: .55, mom: .86 },
+  leve:     { acc: 48, rev: 3.4, damp: .74, idle: .4, mom: .76 },
   classica: { acc: FIS.acc, rev: FIS.rev, damp: FIS.damp, idle: FIS.idle, mom: FIS.mom }
 };
 
@@ -6500,6 +6505,13 @@ window.__ginga = { Jogo, R, App, Lobby, Telas, Salas, SalaLocal, Rede, Online, S
     try { inp.blur(); } catch (_) {}
   });
 
+  // o botãozinho de cima abre o EDITAR BOTÕES (vale nas partidas online também)
+  const bEditar = document.getElementById('h-editar');
+  if (bEditar) bEditar.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    try { const g = G(); if (g.Jogo && g.Jogo.painel) g.Jogo.fechaPainel(); if (g.Editor) g.Editor.abre('jogo'); } catch (_) {}
+  });
+
   // "digitando…": avisa a sala enquanto escreve (vale para os 3 campos de chat da sala)
   let digOn = false, digT = 0;
   const CAMPOS = ['sa-in', 'sj-in', 'chj-in'];
@@ -6511,6 +6523,16 @@ window.__ginga = { Jogo, R, App, Lobby, Telas, Salas, SalaLocal, Rede, Online, S
   }
   document.addEventListener('focusin', e => { if (CAMPOS.includes(e.target.id)) dig(true); });
   document.addEventListener('input', e => { if (CAMPOS.includes(e.target.id)) dig(true); });
+  // iPhone: sem zoom de dois toques nem de pinça (o Android já não fazia isso)
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  let ultimoToque = 0;
+  document.addEventListener('touchend', e => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')){ ultimoToque = 0; return; }   // campo de texto: deixa focar
+    const agora = performance.now();
+    if (agora - ultimoToque <= 350 && e.cancelable) e.preventDefault();
+    ultimoToque = agora;
+  }, { passive: false });
+
   document.addEventListener('focusout', e => {
     if (CAMPOS.includes(e.target.id)) dig(false, true);
     setTimeout(() => { try { const g = G(); if (g.App && g.App.estado === 'jogo') g.App.redimensiona(true); } catch (_) {} }, 350);   // teclado fechou: a tela volta ao tamanho certo
