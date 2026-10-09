@@ -28,7 +28,7 @@ const makePeerClass = globalThis.SB_MAKE_PEER;
 /* ---------- página do jogo com o transporte injetado ---------- */
 const LINK_SRC = fs.readFileSync(path.join(DIR, 'sb-link.js'), 'utf8');
 let PAGINA = fs.readFileSync(path.join(DIR, 'index.html'), 'utf8');
-PAGINA = PAGINA.replace('<script>\n(function(){', '<script>\n' + LINK_SRC + '\n</script>\n<script>\n(function(){');
+PAGINA = PAGINA.replace('<!--SB-LINK-->', '<script>\n' + LINK_SRC + '\n</script>');
 if (!PAGINA.includes('SB_MAKE_PEER')) { console.error('FALHA ao injetar sb-link.js na página'); process.exit(1); }
 
 /* ---------- registro de peers (clientes ws + anfitriãs jsdom) ---------- */
